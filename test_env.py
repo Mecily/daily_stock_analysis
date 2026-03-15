@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-A股自选股智能分析系统 - 环境验证测试
+A 股自选股智能分析系统 - 环境验证测试
 ===================================
 
 用于验证 .env 配置是否正确，包括：
@@ -20,6 +20,11 @@ A股自选股智能分析系统 - 环境验证测试
 
 """
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 # Proxy config - controlled by USE_PROXY env var, off by default.
 # Set USE_PROXY=true in .env if you need a local proxy (e.g. mainland China).
 # GitHub Actions always skips this regardless of USE_PROXY.
@@ -228,13 +233,37 @@ def test_llm():
     print_section("网络连接检查")
     try:
         import socket
+        import ssl
         socket.setdefaulttimeout(10)
-        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("generativelanguage.googleapis.com", 443))
-        print(f"  ✓ 可以连接到 Google API 服务器")
+        
+        # Check if proxy is configured
+        proxy_url = os.getenv("https_proxy") or os.getenv("HTTPS_PROXY")
+        if proxy_url:
+            # Use requests with proxy for connection test
+            try:
+                import requests
+                proxies = {"https": proxy_url}
+                r = requests.get("https://generativelanguage.googleapis.com", proxies=proxies, timeout=10)
+                print(f"  ✓ 通过代理连接到 Google API 服务器 (状态码：{r.status_code})")
+            except Exception as proxy_err:
+                # If proxy fails, try direct connection as fallback
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.connect(("generativelanguage.googleapis.com", 443))
+                    sock.close()
+                    print(f"  ✓ 直接连接到 Google API 服务器")
+                except:
+                    raise proxy_err
+        else:
+            # No proxy, use direct socket connection
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect(("generativelanguage.googleapis.com", 443))
+            sock.close()
+            print(f"  ✓ 可以连接到 Google API 服务器")
     except Exception as e:
-        print(f"  ✗ 无法连接到 Google API 服务器: {e}")
-        print(f"  提示: 请检查网络连接或配置代理")
-        print(f"  提示: 可以设置环境变量 HTTPS_PROXY=http://your-proxy:port")
+        print(f"  ✗ 无法连接到 Google API 服务器：{e}")
+        print(f"  提示：请检查网络连接或配置代理")
+        print(f"  提示：可以设置环境变量 HTTPS_PROXY=http://your-proxy:port")
         return False
     
     analyzer = GeminiAnalyzer()
